@@ -1,0 +1,6 @@
+profile: local
+data_root: ./data
+spark:
+  master: "local[*]"
+  app_name: "bikeops-local"
+  timezone: "UTC"

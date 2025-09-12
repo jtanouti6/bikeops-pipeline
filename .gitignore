@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+.sparkStaging/
+data/bronze/*
+data/silver/*
+data/gold/*
+!data/bronze/.keep
+!data/silver/.keep
+!data/gold/.keep

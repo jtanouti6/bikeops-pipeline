@@ -1,1 +1,0 @@
-# bikeops-pipeline
