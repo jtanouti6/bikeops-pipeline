@@ -1,37 +1,62 @@
+# gold_city_daily.py
+# Objectif :
+# - Agréger la disponibilité (Availability Silver) au niveau ville/jour
+# - Joindre des agrégats météo (Weather Silver) au même grain
+# - Écrire la table GOLD "city_daily_metrics" (Parquet, partitionnée par dt)
+#
+# Points clés :
+# - GCS-friendly : on utilise uri_join (pas de pathlib / resolve)
+# - Gardes-fous légers : types homogènes, city trim, weather optionnelle
+
 from pyspark.sql import functions as F
 
 from bikeops.utils.config import build_spark, load_profile, paths_from_cfg
 
 
+# ---------- Helper URI (sans pathlib, compatible gs://, file://, hdfs://) ----------
 def uri_join(base: str, *parts: str) -> str:
     base = base.rstrip("/")
     tail = "/".join(p.strip("/") for p in parts)
     return f"{base}/{tail}"
 
 
-def main():
-    cfg = load_profile("configs/local.yaml")
+def main() -> None:
+    # 1) Config + session
+    cfg = load_profile("configs/local.yaml")  # sur Dataproc, le launcher force GCS
     spark = build_spark("bikeops-gold-city-daily", cfg["spark"]["timezone"])
     p = paths_from_cfg(cfg)
 
+    # 2) Entrées Silver
     avail_path = uri_join(p["silver"], "availability_silver")
     weather_path = uri_join(p["silver"], "weather_silver")
 
-    # --- Lire Silver
-    avail = spark.read.parquet(
-        avail_path
-    )  # attendu: station_id, city, dt, hour, bikes_available, capacity, status
-    weather = spark.read.parquet(
-        weather_path
-    )  # attendu: city, observed_at, temp_c, precip_mm, dt
+    # availability_silver attendu :
+    #   station_id, city, dt (date), hour, bikes_available, capacity, status
+    avail = spark.read.parquet(avail_path)
 
-    # --- Vérifs colonnes minimales
+    # weather_silver attendu (selon ingestion_weather) :
+    #   city, observed_at (ts), temp_c (double), precip_mm (double), dt (date)
+    weather = spark.read.parquet(weather_path)
+
+    # 3) Vérifs colonnes minimales (availability)
     req_avail = {"city", "dt", "bikes_available", "capacity", "status", "station_id"}
     miss = req_avail.difference(set(avail.columns))
     if miss:
         raise RuntimeError(f"Colonnes manquantes dans availability_silver: {miss}")
 
-    # --- Agrégats ville/jour depuis availability
+    # 4) Harmonisation types / nettoyage clés de groupby/join
+    #    (au cas où des upstream changent le schéma)
+    avail = (
+        avail.withColumn("city", F.trim(F.col("city")))
+        .withColumn("dt", F.to_date("dt"))
+        .filter(F.col("city").isNotNull())
+    )
+
+    weather = weather.withColumn("city", F.trim(F.col("city"))).withColumn(
+        "dt", F.to_date("dt")
+    )
+
+    # 5) Agrégats ville/jour (disponibilité)
     city_daily = avail.groupBy("city", "dt").agg(
         F.count(F.lit(1)).alias("n_obs"),
         F.countDistinct("station_id").alias("n_stations"),
@@ -53,8 +78,7 @@ def main():
         ).alias("pct_out_of_service"),
     )
 
-    # --- Agrégats météo ville/jour (si colonnes présentes)
-    # (Permet de rester robuste si certaines colonnes sont absentes)
+    # 6) Agrégats météo ville/jour (si colonnes présentes)
     weather_cols = set(weather.columns)
     w_aggs = []
     if "temp_c" in weather_cols:
@@ -65,18 +89,19 @@ def main():
     if w_aggs:
         weather_daily = weather.groupBy("city", "dt").agg(*w_aggs)
     else:
-        # Pas d'agg météo possible → table vide mais colonnes clés présentes
+        # Pas d'agg météo possible → table vide avec les clés pour une left join propre
         weather_daily = spark.createDataFrame([], "city string, dt date")
 
-    # --- Jointure ville/jour
+    # 7) Jointure ville/jour
     gold = city_daily.alias("m").join(
         weather_daily.alias("w"), on=["city", "dt"], how="left"
     )
 
-    # --- Écriture GOLD (partition par dt)
+    # 8) Écriture GOLD (Parquet partitionné par dt)
     dest = uri_join(p["gold"], "city_daily_metrics")
-    (gold.write.mode("overwrite").partitionBy("dt").parquet(dest))
+    gold.write.mode("overwrite").partitionBy("dt").parquet(dest)
 
+    # 9) Aperçu
     print("Gold → city_daily_metrics :", dest)
     gold.orderBy("city", "dt").show(20, truncate=False)
 
