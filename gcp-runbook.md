@@ -254,3 +254,14 @@ gsutil iam ch "serviceAccount:$DP_SA:roles/storage.objectAdmin" "gs://$BUCKET"
 # Batch
 gcloud dataproc batches submit pyspark "gs://$BUCKET/jobs/stations_gcs_launcher.py"   --project="$PROJECT_ID" --region="$REGION"   --container-image="$AR_HOST/$PROJECT_ID/$REPO/etl:TAG"   --properties="spark.sql.session.timeZone=UTC"
 ```
+
+
+
+# build + push (plateforme amd64)
+./docker-push.sh uri-fix-$(git rev-parse --short HEAD)
+
+# sans rebuild (re-push un tag déjà buildé localement)
+BUILD=0 ./docker-push.sh test-repush etl docker/etl.Dockerfile .
+
+# push + latest
+PUSH_LATEST=1 ./docker-push.sh main-$(git rev-parse --short HEAD)

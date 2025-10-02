@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pyspark.sql import functions as F
 
 from bikeops.config.schema_loader import load_contract
@@ -63,7 +61,7 @@ def main():
     report.show(truncate=False)
 
     # --- écriture Silver (Parquet partitionné par dt)
-    dest = str((Path(p["silver"]) / "weather_silver").resolve())
+    dest = uri_join(p["silver"], "weather_silver")
     (out.write.mode("overwrite").partitionBy("dt").parquet(dest))
     print("Weather silver →", dest)
     print("Rows:", out.count())

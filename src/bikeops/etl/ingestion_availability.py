@@ -87,7 +87,7 @@ def main():
     report.show(truncate=False)
 
     # --- écriture Silver (Parquet partitionné)
-    dest = str((Path(p["silver"]) / "availability_silver").resolve())
+    dest = uri_join(p["silver"], "availability_silver")
     (clean.write.mode("overwrite").partitionBy("dt", "hour").parquet(dest))
 
     print("Availability silver →", dest)

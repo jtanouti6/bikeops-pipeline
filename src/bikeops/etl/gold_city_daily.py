@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pyspark.sql import functions as F
 
 from bikeops.utils.config import build_spark, load_profile, paths_from_cfg
@@ -76,7 +74,7 @@ def main():
     )
 
     # --- Écriture GOLD (partition par dt)
-    dest = str((Path(p["gold"]) / "city_daily_metrics").resolve())
+    dest = uri_join(p["gold"], "city_daily_metrics")
     (gold.write.mode("overwrite").partitionBy("dt").parquet(dest))
 
     print("Gold → city_daily_metrics :", dest)

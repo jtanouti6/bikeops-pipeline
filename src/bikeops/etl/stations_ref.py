@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from pyspark.sql import Window
 from pyspark.sql import functions as F
 
@@ -68,7 +66,7 @@ def main():
     report.show(truncate=False)
 
     # --- écriture Silver (Parquet)
-    dest = str((Path(p["silver"]) / "stations_silver").resolve())
+    dest = uri_join(p["silver"], "stations_silver")
     (out.coalesce(1).write.mode("overwrite").parquet(dest))  # faible volume → pratique
 
     print("Stations silver →", dest)

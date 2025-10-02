@@ -8,16 +8,18 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" || $# -lt 1 ]]; then
   exit 1
 fi
 
-TAG="$1"                                   # obligatoire
-IMAGE_NAME="${2:-etl}"                     # défaut: etl
-DOCKERFILE="${3:-docker/etl.Dockerfile}"   # défaut: docker/etl.Dockerfile
-CONTEXT="${4:-.}"                          # défaut: racine du repo
+TAG="$1"
+IMAGE_NAME="${2:-etl}"
+DOCKERFILE="${3:-docker/etl.Dockerfile}"
+CONTEXT="${4:-.}"
 
-# Config (surcharge possible via env)
+# Config (surchargables via env)
 PROJECT_ID="${PROJECT_ID:-fil-rouge-pipeline}"
 REGION="${REGION:-europe-west1}"
 REPO="${REPO:-bikeops}"
 AR_HOST="${AR_HOST:-${REGION}-docker.pkg.dev}"
+BUILD_OPTS="${BUILD_OPTS:---pull --platform linux/amd64}"   # <— tweak 1
+PUSH_LATEST="${PUSH_LATEST:-0}"
 
 LOCAL_IMAGE="${IMAGE_NAME}:${TAG}"
 AR_IMAGE="${AR_HOST}/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${TAG}"
@@ -26,10 +28,24 @@ AR_IMAGE="${AR_HOST}/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${TAG}"
 [[ -f "${DOCKERFILE}" ]] || { echo "❌ Dockerfile introuvable: ${DOCKERFILE}"; exit 3; }
 [[ -d "${CONTEXT}" ]]    || { echo "❌ Context introuvable: ${CONTEXT}"; exit 2; }
 
-# Build local (désactiver avec BUILD=0)
+# GCP sanity
+CURRENT_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
+[[ "${CURRENT_PROJECT}" == "${PROJECT_ID}" ]] || {
+  echo "❌ gcloud project actif='${CURRENT_PROJECT}', attendu='${PROJECT_ID}'"
+  echo "   ➜ corrige avec: gcloud config set project '${PROJECT_ID}'"
+  exit 4
+}
+# (optionnel) vérifier l’existence du repo
+gcloud artifacts repositories describe "${REPO}" --location "${REGION}" >/dev/null 2>&1 || {
+  echo "❌ Repo AR manquant: ${REPO} (region: ${REGION})"
+  echo "   ➜ crée-le: gcloud artifacts repositories create '${REPO}' --repository-format=docker --location='${REGION}'"
+  exit 5
+}
+
+# Build local
 if [[ "${BUILD:-1}" != "0" ]]; then
-  echo "🔨 Build: ${LOCAL_IMAGE} (Dockerfile=${DOCKERFILE}, context=${CONTEXT})"
-  docker build -f "${DOCKERFILE}" -t "${LOCAL_IMAGE}" "${CONTEXT}"
+  echo "🔨 Build: ${LOCAL_IMAGE}  (Dockerfile=${DOCKERFILE}, context=${CONTEXT})"
+  docker build ${BUILD_OPTS} -f "${DOCKERFILE}" -t "${LOCAL_IMAGE}" "${CONTEXT}"
 fi
 
 # Auth & push
@@ -42,5 +58,17 @@ docker tag "${LOCAL_IMAGE}" "${AR_IMAGE}"
 echo "🚀 Push -> ${AR_IMAGE}"
 docker push "${AR_IMAGE}"
 
-echo "✅ Pushed: ${AR_IMAGE}"
+if [[ "${PUSH_LATEST}" == "1" ]]; then
+  LATEST="${AR_HOST}/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:latest"
+  echo "🏷️  Tag -> ${LATEST}"
+  docker tag "${LOCAL_IMAGE}" "${LATEST}"
+  echo "🚀 Push -> ${LATEST}"
+  docker push "${LATEST}"
+fi
 
+echo "🔎 Images récentes:"
+gcloud artifacts docker images list \
+  "${AR_HOST}/${PROJECT_ID}/${REPO}" \
+  --format="table(IMAGE,VERSION,DIGEST,UPDATE_TIME)" | head -n 20
+
+echo "✅ Pushed: ${AR_IMAGE}"
