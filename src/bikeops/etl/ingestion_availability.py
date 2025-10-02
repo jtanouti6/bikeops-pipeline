@@ -37,7 +37,12 @@ def main():
     src = uri_join(p["bronze"], "availability_raw.csv")
 
     # --- lecture bronze: CSV ';'
-    df = spark.read.option("header", True).option("sep", ";").option("inferSchema", True).csv(src)
+    df = (
+        spark.read.option("header", True)
+        .option("sep", ";")
+        .option("inferSchema", True)
+        .csv(src)
+    )
 
     # --- mapping / cast
     # timestamp -> observed_at ; slots_free -> docks_available
@@ -69,7 +74,8 @@ def main():
     ).withColumn(
         "capacity_violation_flag",
         F.when(
-            (F.col("capacity").isNotNull()) & (F.col("bikes_available") > F.col("capacity")),
+            (F.col("capacity").isNotNull())
+            & (F.col("bikes_available") > F.col("capacity")),
             F.lit(True),
         ).otherwise(F.lit(False)),
     )

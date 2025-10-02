@@ -23,7 +23,9 @@ def test_spaces_and_case(spark):
 
 
 def test_null_and_decimal_comma(spark):
-    df = spark.createDataFrame([("null",), ("NA",), ("",), ("16,1",), ("0,0",)], ["raw"])
+    df = spark.createDataFrame(
+        [("null",), ("NA",), ("",), ("16,1",), ("0,0",)], ["raw"]
+    )
     got = df.select(
         normalize_null_str("raw").alias("norm"),
         to_double_from_str_any("raw").alias("as_double"),

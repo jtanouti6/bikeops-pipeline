@@ -23,7 +23,9 @@ def main():
     avail = spark.read.parquet(
         avail_path
     )  # attendu: station_id, city, dt, hour, bikes_available, capacity, status
-    weather = spark.read.parquet(weather_path)  # attendu: city, observed_at, temp_c, precip_mm, dt
+    weather = spark.read.parquet(
+        weather_path
+    )  # attendu: city, observed_at, temp_c, precip_mm, dt
 
     # --- Vérifs colonnes minimales
     req_avail = {"city", "dt", "bikes_available", "capacity", "status", "station_id"}
@@ -45,12 +47,12 @@ def main():
             ),
             4,
         ).alias("occ_rate_avg"),
-        F.round(100 * F.avg(F.when(F.col("bikes_available") == 0, 1).otherwise(0)), 2).alias(
-            "pct_zero_bikes"
-        ),
-        F.round(100 * F.avg(F.when(F.col("status") != "in_service", 1).otherwise(0)), 2).alias(
-            "pct_out_of_service"
-        ),
+        F.round(
+            100 * F.avg(F.when(F.col("bikes_available") == 0, 1).otherwise(0)), 2
+        ).alias("pct_zero_bikes"),
+        F.round(
+            100 * F.avg(F.when(F.col("status") != "in_service", 1).otherwise(0)), 2
+        ).alias("pct_out_of_service"),
     )
 
     # --- Agrégats météo ville/jour (si colonnes présentes)
@@ -69,7 +71,9 @@ def main():
         weather_daily = spark.createDataFrame([], "city string, dt date")
 
     # --- Jointure ville/jour
-    gold = city_daily.alias("m").join(weather_daily.alias("w"), on=["city", "dt"], how="left")
+    gold = city_daily.alias("m").join(
+        weather_daily.alias("w"), on=["city", "dt"], how="left"
+    )
 
     # --- Écriture GOLD (partition par dt)
     dest = str((Path(p["gold"]) / "city_daily_metrics").resolve())

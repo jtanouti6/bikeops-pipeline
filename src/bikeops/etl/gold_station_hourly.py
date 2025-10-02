@@ -51,11 +51,17 @@ def main():
             4,
         ).alias("occ_rate_avg"),
         F.round(
-            100 * F.avg(F.when(F.col("bikes_available") == 0, F.lit(1)).otherwise(F.lit(0))),
+            100
+            * F.avg(
+                F.when(F.col("bikes_available") == 0, F.lit(1)).otherwise(F.lit(0))
+            ),
             2,
         ).alias("pct_zero_bikes"),
         F.round(
-            100 * F.avg(F.when(F.col("status") != "in_service", F.lit(1)).otherwise(F.lit(0))),
+            100
+            * F.avg(
+                F.when(F.col("status") != "in_service", F.lit(1)).otherwise(F.lit(0))
+            ),
             2,
         ).alias("pct_out_of_service"),
     )

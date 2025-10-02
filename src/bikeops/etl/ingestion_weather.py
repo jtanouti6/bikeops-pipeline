@@ -5,7 +5,11 @@ from pyspark.sql import functions as F
 from bikeops.config.schema_loader import load_contract
 from bikeops.quality.quality_check import run_quality_checks
 from bikeops.utils.config import build_spark, load_profile, paths_from_cfg
-from bikeops.utils.transforms import normalize_null_str, to_double_from_str_any, to_title
+from bikeops.utils.transforms import (
+    normalize_null_str,
+    to_double_from_str_any,
+    to_title,
+)
 
 
 # helper sûr pour gs:// et chemins locaux
@@ -40,8 +44,12 @@ def main():
     # --- mapping + normalisation
     out = (
         df.withColumn("observed_at", ts_col)
-        .withColumn("temp_c", to_double_from_str_any(normalize_null_str(F.col("temperature_c"))))
-        .withColumn("precip_mm", to_double_from_str_any(normalize_null_str(F.col("rain_mm"))))
+        .withColumn(
+            "temp_c", to_double_from_str_any(normalize_null_str(F.col("temperature_c")))
+        )
+        .withColumn(
+            "precip_mm", to_double_from_str_any(normalize_null_str(F.col("rain_mm")))
+        )
         .withColumn("weather_code", F.upper(F.trim(F.col("weather_condition"))))
         .withColumn("city", to_title(F.lit(default_city)))
         .withColumn("dt", F.to_date("observed_at"))

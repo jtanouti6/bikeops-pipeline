@@ -40,7 +40,9 @@ def spark():
         .config("spark.ui.showConsoleProgress", "false")
         .config("spark.driver.bindAddress", "127.0.0.1")
         .config("spark.driver.host", "127.0.0.1")
-        .config("spark.executorEnv.PYSPARK_PYTHON", pyexe)  # workers utilisent le même Python
+        .config(
+            "spark.executorEnv.PYSPARK_PYTHON", pyexe
+        )  # workers utilisent le même Python
         .config("spark.driver.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
         .config("spark.executor.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
         .getOrCreate()

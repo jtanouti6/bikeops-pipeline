@@ -23,7 +23,12 @@ def main():
 
     # --- lecture bronze (CSV virgule)
     src = uri_join(p["bronze"], "stations.csv")
-    df = spark.read.option("header", True).option("inferSchema", True).option("sep", ",").csv(src)
+    df = (
+        spark.read.option("header", True)
+        .option("inferSchema", True)
+        .option("sep", ",")
+        .csv(src)
+    )
 
     # --- renommage / cast
     df = (
@@ -49,8 +54,12 @@ def main():
     )
 
     # --- dédup (station_id) : garder la plus récente par ingestion_ts
-    w = Window.partitionBy("station_id").orderBy(F.col("ingestion_ts").desc_nulls_last())
-    out = out.withColumn("rn", F.row_number().over(w)).filter(F.col("rn") == 1).drop("rn")
+    w = Window.partitionBy("station_id").orderBy(
+        F.col("ingestion_ts").desc_nulls_last()
+    )
+    out = (
+        out.withColumn("rn", F.row_number().over(w)).filter(F.col("rn") == 1).drop("rn")
+    )
 
     # --- qualité (rapide) selon contrat
     contract = load_contract("contracts/stations.schema.yaml")
