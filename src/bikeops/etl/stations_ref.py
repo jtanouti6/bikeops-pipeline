@@ -20,7 +20,9 @@ def uri_join(base: str, *parts: str) -> str:
 
 def main() -> None:
     # 1) Config + session
-    cfg = load_profile("configs/local.yaml")  # sur Dataproc, un launcher override la racine vers GCS
+    cfg = load_profile(
+        "configs/local.yaml"
+    )  # sur Dataproc, un launcher override la racine vers GCS
     spark = build_spark("bikeops-stations-silver", cfg["spark"]["timezone"])
     p = paths_from_cfg(cfg)
 
@@ -42,7 +44,9 @@ def main() -> None:
 
     # 4) Dérivations & normalisation
     # city = début du name avant un tiret (classique "Lille - Station 01")
-    city_from_name = F.regexp_extract(F.trim(F.col("name")), r"^\s*([^-\u2013\u2014]+)", 1)
+    city_from_name = F.regexp_extract(
+        F.trim(F.col("name")), r"^\s*([^-\u2013\u2014]+)", 1
+    )
 
     out = (
         df.withColumn("station_id", F.col("station_id").cast("int"))
@@ -59,15 +63,25 @@ def main() -> None:
     )
 
     # Garde-fous simples (bornes géo très larges)
-    out = out.where(
-        (F.col("latitude").isNull()) | ((F.col("latitude") >= -90) & (F.col("latitude") <= 90))
-    ).where(
-        (F.col("longitude").isNull()) | ((F.col("longitude") >= -180) & (F.col("longitude") <= 180))
-    ).dropna(subset=["station_id"])
+    out = (
+        out.where(
+            (F.col("latitude").isNull())
+            | ((F.col("latitude") >= -90) & (F.col("latitude") <= 90))
+        )
+        .where(
+            (F.col("longitude").isNull())
+            | ((F.col("longitude") >= -180) & (F.col("longitude") <= 180))
+        )
+        .dropna(subset=["station_id"])
+    )
 
     # 5) Dédup (station_id) — on garde la + récente
-    w = Window.partitionBy("station_id").orderBy(F.col("ingestion_ts").desc_nulls_last())
-    out = out.withColumn("rn", F.row_number().over(w)).where(F.col("rn") == 1).drop("rn")
+    w = Window.partitionBy("station_id").orderBy(
+        F.col("ingestion_ts").desc_nulls_last()
+    )
+    out = (
+        out.withColumn("rn", F.row_number().over(w)).where(F.col("rn") == 1).drop("rn")
+    )
 
     # 6) Qualité rapide (contrat YAML)
     contract = load_contract("contracts/stations.schema.yaml")
@@ -77,7 +91,9 @@ def main() -> None:
 
     # 7) Écriture Silver (Parquet)
     dest = uri_join(p["silver"], "stations_silver")
-    out.coalesce(1).write.mode("overwrite").parquet(dest)  # faible volume → 1 fichier pratique
+    out.coalesce(1).write.mode("overwrite").parquet(
+        dest
+    )  # faible volume → 1 fichier pratique
 
     print("Stations silver →", dest)
     print("Rows:", out.count())

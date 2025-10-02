@@ -256,6 +256,39 @@ gcloud dataproc batches submit pyspark "gs://$BUCKET/jobs/stations_gcs_launcher.
 ```
 
 
+export PROJECT_ID="fil-rouge-pipeline"
+export REGION="europe-west9"
+export REPO="bikeops"
+export AR_HOST="${REGION}-docker.pkg.dev"
+
+gcloud config set project "$PROJECT_ID"
+gcloud services enable artifactregistry.googleapis.com
+
+# créer le repo docker en ew9 (idempotent)
+gcloud artifacts repositories create "$REPO" \
+  --repository-format=docker --location="$REGION" \
+  --description="BikeOps images (ew9)" || echo "repo ok"
+gcloud auth configure-docker "$AR_HOST" --quiet
+# si encore "Unauthenticated":
+gcloud auth print-access-token | docker login -u oauth2accesstoken --password-stdin "https://${AR_HOST}"
+
+
+gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+  --member="user:tanoutijaouad@gmail.com" \
+  --role="roles/artifactregistry.writer"
+
+  # remplace par ton tag si différent
+export LOCAL_IMAGE="bikeops-etl:dev-sparkuser"
+export TAG="uri-fix-08df13e"
+export AR_IMAGE="${AR_HOST}/${PROJECT_ID}/${REPO}/etl:${TAG}"
+
+docker tag "${LOCAL_IMAGE}" "${AR_IMAGE}"
+docker push "${AR_IMAGE}"
+
+# vérif
+gcloud artifacts docker images list \
+  "${AR_HOST}/${PROJECT_ID}/${REPO}" \
+  --format="table(IMAGE,VERSION,UPDATE_TIME)" | head -n 20
 
 # build + push (plateforme amd64)
 ./docker-push.sh uri-fix-$(git rev-parse --short HEAD)

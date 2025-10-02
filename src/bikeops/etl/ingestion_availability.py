@@ -54,7 +54,9 @@ def _pick_source_file(bronze_base: str, spark: SparkSession) -> str:
 # ---------- Job principal ----------
 def main() -> None:
     # 1) Config & session Spark
-    cfg = load_profile("configs/local.yaml")  # sur Dataproc, un launcher override ce profil -> GCS
+    cfg = load_profile(
+        "configs/local.yaml"
+    )  # sur Dataproc, un launcher override ce profil -> GCS
     spark = build_spark("bikeops-availability-silver", cfg["spark"]["timezone"])
     p = paths_from_cfg(cfg)  # renvoie {bronze|silver|gold} compatibles URI
 
@@ -77,7 +79,7 @@ def main() -> None:
         .withColumn("bikes_available", F.col("bikes_available").cast("int"))
         .withColumn("docks_available", F.col("slots_free").cast("int"))
         .drop("timestamp", "slots_free")
-        .withColumn("status", F.lit("in_service"))       # valeur par défaut (pas en brut)
+        .withColumn("status", F.lit("in_service"))  # valeur par défaut (pas en brut)
         .withColumn("source", F.lit("raw"))
         .withColumn("ingestion_ts", F.current_timestamp())
         .withColumn("dt", F.to_date("observed_at"))
@@ -94,20 +96,17 @@ def main() -> None:
     stations_path = uri_join(p["silver"], "stations_silver")
     stations = spark.read.parquet(stations_path)
 
-    clean = (
-        df.join(
-            stations.select("station_id", "city", "capacity"),
-            on="station_id",
-            how="left",
-        )
-        .withColumn(
-            "capacity_violation_flag",
-            F.when(
-                (F.col("capacity").isNotNull())
-                & (F.col("bikes_available") > F.col("capacity")),
-                F.lit(True),
-            ).otherwise(F.lit(False)),
-        )
+    clean = df.join(
+        stations.select("station_id", "city", "capacity"),
+        on="station_id",
+        how="left",
+    ).withColumn(
+        "capacity_violation_flag",
+        F.when(
+            (F.col("capacity").isNotNull())
+            & (F.col("bikes_available") > F.col("capacity")),
+            F.lit(True),
+        ).otherwise(F.lit(False)),
     )
 
     # 6) Contrôles qualité (rapides) via contrat YAML
