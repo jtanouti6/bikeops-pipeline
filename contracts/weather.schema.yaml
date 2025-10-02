@@ -1,0 +1,21 @@
+version: 1
+name: weather
+primary_key: [city, observed_at]
+description: "Météo agrégée par ville pour enrichir l’analyse."
+partitions:
+  silver: ["dt"]
+  gold:   ["dt"]
+
+fields:
+  - { name: city,        type: string,    required: true,  normalize: ["trim","title"] }
+  - { name: observed_at, type: timestamp, required: true }
+  - { name: temp_c,      type: double,    required: false, nullable: true, range: [-40, 55] }
+  - { name: precip_mm,   type: double,    required: false, nullable: true, min: 0 }
+  - { name: wind_kmh,    type: double,    required: false, nullable: true, min: 0 }
+  - { name: weather_code,type: string,    required: false, normalize: ["trim","upper"] }
+
+derived:
+  - { name: dt, from: "date(observed_at)" }
+
+quality_checks:
+  - { name: temp_reasonable, expr: "temp_c IS NULL OR (temp_c BETWEEN -40 AND 55)" }

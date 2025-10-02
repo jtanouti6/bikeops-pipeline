@@ -1,0 +1,44 @@
+version: 1
+name: stations
+primary_key: [station_id]
+unique: [[city, name]]
+description: "Référentiel des stations vélos."
+partitions:
+  silver: []              # pas de partition au ref
+  gold:   []              # agrégats feront leur propre partition
+dedup:
+  keys: [station_id]
+  prefer: updated_at      # si dispo dans la source
+
+fields:
+  - name: station_id
+    type: int
+    required: true
+    description: "Identifiant unique station (source)."
+
+  - name: station_name
+    type: string
+    required: true
+    normalize: ["trim", "title"]
+
+  - name: lat
+    type: double
+    required: true
+    range: [-90, 90]
+
+  - name: lon
+    type: double
+    required: true
+    range: [-180, 180]
+
+  - name: capacity
+    type: int
+    required: true
+    min: 0
+
+quality_checks:
+  - name: capacity_non_negative
+    expr: "capacity >= 0"
+
+  - name: lat_long_valid
+    expr: "latitude BETWEEN -90 AND 90 AND longitude BETWEEN -180 AND 180"

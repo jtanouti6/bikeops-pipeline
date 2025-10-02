@@ -4,3 +4,5 @@ spark:
   master: "local[*]"
   app_name: "bikeops-local"
   timezone: "UTC"
+weather:
+  city: "Lille"   # ville cible du fichier weather_raw.csv (pas de colonne 'city' en entrée)

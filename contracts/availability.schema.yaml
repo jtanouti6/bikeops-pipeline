@@ -1,0 +1,34 @@
+version: 1
+name: availability
+primary_key: [station_id, observed_at]
+description: "Snapshots de disponibilité en libre-service."
+partitions:
+  silver: ["dt", "hour"]          # dt = date(observed_at), hour = hour(observed_at)
+  gold:   ["dt"]
+
+dedup:
+  keys: [station_id, observed_at]
+  prefer: ingestion_ts            # garde le plus récent si doublons stricts
+
+fields:
+  - { name: station_id,      type: int,    required: true }
+  - { name: observed_at,     type: timestamp, required: true }
+  - { name: bikes_available, type: int,    required: true, min: 0 }
+  - { name: docks_available, type: int,    required: false, nullable: true, min: 0 }
+  - { name: status,          type: string, required: false, enum: ["in_service","out_of_service","maintenance"], normalize: ["trim","lower"] }
+  - { name: source,          type: string, required: false, normalize: ["trim","lower"] }
+  - { name: ingestion_ts,    type: timestamp, required: true }
+
+derived:
+  - name: dt
+    from: "date(observed_at)"
+  - name: hour
+    from: "hour(observed_at)"
+
+quality_checks:
+  - name: bikes_non_negative
+    expr: "bikes_available >= 0"
+
+  - name: capacity_consistency_if_known
+    # si docks_available connu: bikes + docks <= capacity (join plus tard avec stations)
+    expr: "CASE WHEN docks_available IS NOT NULL THEN bikes_available >= 0 AND docks_available >= 0 ELSE TRUE END"
