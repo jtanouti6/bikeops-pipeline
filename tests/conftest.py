@@ -50,8 +50,9 @@ if os.environ.get("JAVA_HOME"):
 # ---------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def spark():
+    """Session Spark unique, initialisée à fond + auto-recover si gateway KO."""
     pyexe = sys.executable
-    spark = (
+    builder = (
         SparkSession.builder.master("local[2]")
         .appName("bikeops-tests")
         .config("spark.sql.session.timeZone", "UTC")
@@ -61,10 +62,28 @@ def spark():
         .config("spark.executorEnv.PYSPARK_PYTHON", pyexe)
         .config("spark.driver.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
         .config("spark.executor.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
-        .getOrCreate()
     )
+
+    def _start():
+        s = builder.getOrCreate()
+        # Forcer l’initialisation JVM côté driver (crée _jsc) et un job no-op
+        _ = s.sparkContext  # force la création du SparkContext
+        # Si _jsc est encore None, on relance proprement
+        if getattr(s.sparkContext, "_jsc", None) is None:
+            s.stop()
+            s = builder.getOrCreate()
+        # One tiny action pour initialiser le scheduler/executor
+        s.range(1).count()
+        s.sparkContext.setLogLevel("WARN")
+        return s
+
+    spark = _start()
     yield spark
-    spark.stop()
+
+    try:
+        spark.stop()
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------
