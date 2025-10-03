@@ -9,6 +9,7 @@ import os
 import sys
 
 import pytest
+from pyspark import SparkConf, SparkContext  # ⟵ init JVM/SC d'abord
 from pyspark.sql import SparkSession
 
 # ---------------------------------------------------------------------
@@ -42,44 +43,48 @@ if os.environ.get("JAVA_HOME"):
 
 
 # ---------------------------------------------------------------------
-# 3) Fixture Spark unique (scope=session)
-#    - local[2] : 2 threads suffisent pour nos tests
-#    - timezone UTC pour des résultats déterministes
-#    - IPv4 + bind/host loopback pour éviter des résolutions hasardeuses en CI
-#    - executorEnv.PYSPARK_PYTHON = même Python que le driver
+# 3) Fixture Spark unique (scope=session) via SparkContext → SparkSession
+#    - On crée d'abord SparkContext (JVM) avec SparkConf
+#    - Warmup d'une petite action RDD pour initialiser le scheduler
+#    - Puis SparkSession(sc) par-dessus (évite _jsc=None)
 # ---------------------------------------------------------------------
 @pytest.fixture(scope="session")
 def spark():
-    """Session Spark unique, initialisée à fond + auto-recover si gateway KO."""
+    """Session Spark unique, JVM initialisée via SparkContext + warmup RDD."""
     pyexe = sys.executable
-    builder = (
-        SparkSession.builder.master("local[2]")
-        .appName("bikeops-tests")
-        .config("spark.sql.session.timeZone", "UTC")
-        .config("spark.ui.showConsoleProgress", "false")
-        .config("spark.driver.bindAddress", "127.0.0.1")
-        .config("spark.driver.host", "127.0.0.1")
-        .config("spark.executorEnv.PYSPARK_PYTHON", pyexe)
-        .config("spark.driver.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
-        .config("spark.executor.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
+
+    # Conf explicite pour le SC (JVM)
+    conf = (
+        SparkConf()
+        .setMaster("local[2]")
+        .setAppName("bikeops-tests")
+        .set("spark.sql.session.timeZone", "UTC")
+        .set("spark.ui.showConsoleProgress", "false")
+        .set("spark.driver.bindAddress", "127.0.0.1")
+        .set("spark.driver.host", "127.0.0.1")
+        .set("spark.executorEnv.PYSPARK_PYTHON", pyexe)
+        .set("spark.driver.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
+        .set("spark.executor.extraJavaOptions", "-Djava.net.preferIPv4Stack=true")
     )
 
-    def _start():
-        s = builder.getOrCreate()
-        # Forcer l’initialisation JVM côté driver (crée _jsc) et un job no-op
-        _ = s.sparkContext  # force la création du SparkContext
-        # Si _jsc est encore None, on relance proprement
-        if getattr(s.sparkContext, "_jsc", None) is None:
-            s.stop()
-            s = builder.getOrCreate()
-        # One tiny action pour initialiser le scheduler/executor
-        s.range(1).count()
-        s.sparkContext.setLogLevel("WARN")
-        return s
+    # Démarrage du SparkContext (JVM)
+    sc = SparkContext.getOrCreate(conf)
 
-    spark = _start()
+    # Si la gateway Java n'est pas prête, on redémarre proprement
+    if getattr(sc, "_jsc", None) is None:
+        sc.stop()
+        sc = SparkContext.getOrCreate(conf)
+
+    # Warmup: une petite action RDD pour initialiser le scheduler/executor
+    sc.parallelize([1]).count()
+    sc.setLogLevel("WARN")
+
+    # Crée la SparkSession à partir du SC existant
+    spark = SparkSession(sc)
+
     yield spark
 
+    # Teardown silencieux
     try:
         spark.stop()
     except Exception:
@@ -87,11 +92,9 @@ def spark():
 
 
 # ---------------------------------------------------------------------
-# 4) Démarrage automatique :
-#    Même si un test n'accepte pas explicitement le paramètre `spark`,
-#    cette fixture autouse garantit que la session est créée au début.
+# 4) Démarrage automatique pour tous les tests (même sans paramètre `spark`)
 # ---------------------------------------------------------------------
 @pytest.fixture(autouse=True, scope="session")
 def _ensure_spark_session(spark):
-    # Rien à faire : le fait de dépendre de `spark` force son initialisation.
+    # Le fait de dépendre de `spark` force son initialisation au début de la session.
     yield
