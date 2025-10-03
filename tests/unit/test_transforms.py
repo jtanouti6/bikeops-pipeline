@@ -1,5 +1,4 @@
 from pyspark.sql import functions as F
-from pyspark import SparkConf, SparkContext
 from pyspark.sql import SparkSession
 
 from bikeops.utils.transforms import (
@@ -14,43 +13,20 @@ from bikeops.utils.transforms import (
 
 def _ensure_active(spark: SparkSession) -> SparkSession:
     """
-    Garantit qu'un SparkContext/SparkSession *actifs* existent côté PySpark.
-    - Force l'init interne (_ensure_initialized)
-    - Si la passerelle Java (_jsc) est absente, recrée proprement SC + Session
-    - Warmup d'une petite action
+    Idempotent: garantit que PySpark connaît bien la session active.
+    - Ne recrée JAMAIS SparkContext (évite 'Only one SparkContext...')
+    - Warmup minimal pour initialiser le scheduler
     - Enregistre les pointeurs 'actifs' utilisés par pyspark.functions
-    Retourne la (potentielle) nouvelle SparkSession.
     """
-    from pyspark.context import SparkContext as _SC
+    sc = spark.sparkContext
+
+    # Warmup: évite des timings bizarres sur GH Actions
+    spark.sql("select 1").collect()
+
+    # Enregistrer explicitement les contextes/sessions "actifs"
     from pyspark import context as _ctx
     from pyspark.sql import session as _sess
 
-    # 1) Forcer l'init interne
-    _SC._ensure_initialized()
-    sc = spark.sparkContext
-
-    # 2) Si la gateway Java est absente, on reconstruit SC + Session
-    if getattr(sc, "_jsc", None) is None or sc._jvm is None:
-        try:
-            spark.stop()
-        except Exception:
-            pass
-        conf = (
-            SparkConf()
-            .setMaster("local[2]")
-            .setAppName("bikeops-tests")
-            .set("spark.sql.session.timeZone", "UTC")
-            .set("spark.ui.showConsoleProgress", "false")
-            .set("spark.driver.bindAddress", "127.0.0.1")
-            .set("spark.driver.host", "127.0.0.1")
-        )
-        sc = SparkContext.getOrCreate(conf)  # nouveau SC
-        spark = SparkSession(sc)  # nouvelle session
-
-    # 3) Warmup (initialise scheduler/executor)
-    sc.parallelize([1]).count()
-
-    # 4) Enregistrer explicitement les contextes/sessions "actifs"
     _ctx.SparkContext._active_spark_context = sc
     _sess.SparkSession._instantiatedSession = spark
     _sess.SparkSession._activeSession = spark
@@ -61,7 +37,7 @@ def _ensure_active(spark: SparkSession) -> SparkSession:
 def test_spaces_and_case(spark):
     spark = _ensure_active(spark)
 
-    # Construire le DF via SQL (évite parallelize/defaultParallelism sur liste Python)
+    # Construire le DF via SQL (pas de parallelize/defaultParallelism)
     df = spark.sql(
         "select '  lille   -  station 01 ' as raw " "union all select 'Rain' as raw"
     )
