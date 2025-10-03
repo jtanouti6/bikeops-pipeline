@@ -1,3 +1,4 @@
+from pyspark.sql import functions as F
 from bikeops.utils.transforms import (
     collapse_spaces,
     normalize_null_str,
@@ -9,16 +10,17 @@ from bikeops.utils.transforms import (
 
 
 def test_spaces_and_case(spark):
-    # ⚠️ Evite spark.createDataFrame([...]) pour contourner sc.parallelize/defaultParallelism
+    # On construit le DF via SQL (pas de parallelize)
     df = spark.sql(
         "select '  lille   -  station 01 ' as raw " "union all select 'Rain' as raw"
     )
 
+    # ⚠️ Passe des Column (F.col) aux helpers pour éviter la résolution par nom
     got = df.select(
-        collapse_spaces("raw").alias("collapsed"),
-        to_title("raw").alias("title"),
-        to_lower("raw").alias("lower"),
-        to_upper("raw").alias("upper"),
+        collapse_spaces(F.col("raw")).alias("collapsed"),
+        to_title(F.col("raw")).alias("title"),
+        to_lower(F.col("raw")).alias("lower"),
+        to_upper(F.col("raw")).alias("upper"),
     ).collect()
 
     assert got[0]["collapsed"] == "lille - station 01"
@@ -28,7 +30,6 @@ def test_spaces_and_case(spark):
 
 
 def test_null_and_decimal_comma(spark):
-    # idem : on passe par SQL pour éviter sc.parallelize sur liste Python
     df = spark.sql(
         "select 'null' as raw "
         "union all select 'NA' "
@@ -38,8 +39,8 @@ def test_null_and_decimal_comma(spark):
     )
 
     got = df.select(
-        normalize_null_str("raw").alias("norm"),
-        to_double_from_str_any("raw").alias("as_double"),
+        normalize_null_str(F.col("raw")).alias("norm"),
+        to_double_from_str_any(F.col("raw")).alias("as_double"),
     ).collect()
 
     assert [r["norm"] for r in got[:3]] == [None, None, None]
