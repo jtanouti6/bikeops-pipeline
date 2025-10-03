@@ -9,13 +9,24 @@ from bikeops.utils.transforms import (
 )
 
 
+def _ensure_active(spark):
+    # Fixe explicitement les contextes/sessions actifs côté PySpark
+    from pyspark import context as _ctx
+    from pyspark.sql import session as _sess
+
+    _ctx.SparkContext._active_spark_context = spark.sparkContext
+    _sess.SparkSession._instantiatedSession = spark
+    _sess.SparkSession._activeSession = spark
+
+
 def test_spaces_and_case(spark):
-    # On construit le DF via SQL (pas de parallelize)
+    _ensure_active(spark)
+
+    # Construire le DF via SQL (évite parallelize/defaultParallelism)
     df = spark.sql(
         "select '  lille   -  station 01 ' as raw " "union all select 'Rain' as raw"
     )
 
-    # ⚠️ Passe des Column (F.col) aux helpers pour éviter la résolution par nom
     got = df.select(
         collapse_spaces(F.col("raw")).alias("collapsed"),
         to_title(F.col("raw")).alias("title"),
@@ -30,6 +41,8 @@ def test_spaces_and_case(spark):
 
 
 def test_null_and_decimal_comma(spark):
+    _ensure_active(spark)
+
     df = spark.sql(
         "select 'null' as raw "
         "union all select 'NA' "
