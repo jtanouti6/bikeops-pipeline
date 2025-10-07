@@ -13,14 +13,8 @@ from bikeops.utils.transforms import (
 
 
 def _ensure_active(spark):
-    """
-    Déclenche l'init JVM côté CI sans assertion bloquante.
-    Certaines plateformes retardent l'init de sc._jsc ; on force une action légère.
-    """
-    # Force l'initialisation paresseuse de la JVM / SparkContext
-    _ = spark.version  # touche la JVM
-    spark.range(1).count()  # action no-op pour initialiser le backend
-    # On ne teste pas sc._jsc ici : inutile pour ces tests de fonctions de string/num
+    # On touche simplement une propriété, sans déclencher d'action distribuée
+    _ = spark.version
 
 
 # NOTE: on garde la signature mais on ne l'utilise plus.
