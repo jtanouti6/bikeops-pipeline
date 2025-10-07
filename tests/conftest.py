@@ -22,5 +22,5 @@ def spark():
         .getOrCreate()
     )
     yield spark
-    spark.stop()
+    # spark.stop()
     shutil.rmtree(tmpdir, ignore_errors=True)
