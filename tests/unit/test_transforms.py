@@ -1,6 +1,6 @@
 # tests/unit/test_transforms.py
-
 from pyspark.sql import functions as F
+from pyspark.sql import DataFrame
 
 from bikeops.utils.transforms import (
     collapse_spaces,
@@ -13,45 +13,25 @@ from bikeops.utils.transforms import (
 
 
 def _ensure_active(spark):
-    """
-    Force les pointeurs 'actifs' utilisés par les helpers PySpark (F.col, collect, ...)
-    afin d'éviter les erreurs du type _active_spark_context is None / setCallSite.
-    """
+    """Vérifie que la JVM/Contexte sont bien initialisés côté CI."""
     sc = spark.sparkContext
-    from pyspark import context as _ctx
-    from pyspark.sql import session as _sess
-
-    _ctx.SparkContext._active_spark_context = sc
-    _sess.SparkSession._instantiatedSession = spark
-    _sess.SparkSession._activeSession = spark
+    assert sc is not None, "SparkContext absent"
+    assert getattr(sc, "_jsc", None) is not None, "Gateway JVM (_jsc) non initialisée"
 
 
-def _bind_df_to(spark, df):
-    """
-    Recâble un DataFrame sur la session/contexte actifs.
-    Hack 'tests only' pour contourner le flakiness PySpark (SPARK-27335).
-    """
-    try:
-        # Rattache la session JVM du DF sur celle de spark
-        df.sql_ctx.sparkSession._jsparkSession = spark._jsparkSession
-    except Exception:
-        pass
-    try:
-        # Rattache le SparkContext Python
-        df._sc = spark.sparkContext
-    except Exception:
-        pass
+# NOTE: on garde la signature mais on ne l'utilise plus.
+def _bind_df_to(spark, df: DataFrame) -> DataFrame:  # pragma: no cover
     return df
 
 
 def test_spaces_and_case(spark):
     _ensure_active(spark)
 
-    # Construire via SQL (évite le parallelize de liste Python)
-    df = spark.sql(
-        "select '  lille   -  station 01 ' as raw " "union all select 'Rain' as raw"
+    # Construire le DF via createDataFrame (plus robuste en CI que spark.sql)
+    df = spark.createDataFrame(
+        [("  lille   -  station 01 ",), ("Rain",)],
+        ["raw"],
     )
-    df = _bind_df_to(spark, df)
 
     got = df.select(
         collapse_spaces(F.col("raw")).alias("collapsed"),
@@ -70,14 +50,10 @@ def test_spaces_and_case(spark):
 def test_null_and_decimal_comma(spark):
     _ensure_active(spark)
 
-    df = spark.sql(
-        "select 'null' as raw "
-        "union all select 'NA' "
-        "union all select '' "
-        "union all select '16,1' "
-        "union all select '0,0'"
+    df = spark.createDataFrame(
+        [("null",), ("NA",), ("",), ("16,1",), ("0,0",)],
+        ["raw"],
     )
-    df = _bind_df_to(spark, df)
 
     got = df.select(
         normalize_null_str(F.col("raw")).alias("norm"),
