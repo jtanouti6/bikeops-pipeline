@@ -13,10 +13,14 @@ from bikeops.utils.transforms import (
 
 
 def _ensure_active(spark):
-    """Vérifie que la JVM/Contexte sont bien initialisés côté CI."""
-    sc = spark.sparkContext
-    assert sc is not None, "SparkContext absent"
-    assert getattr(sc, "_jsc", None) is not None, "Gateway JVM (_jsc) non initialisée"
+    """
+    Déclenche l'init JVM côté CI sans assertion bloquante.
+    Certaines plateformes retardent l'init de sc._jsc ; on force une action légère.
+    """
+    # Force l'initialisation paresseuse de la JVM / SparkContext
+    _ = spark.version  # touche la JVM
+    spark.range(1).count()  # action no-op pour initialiser le backend
+    # On ne teste pas sc._jsc ici : inutile pour ces tests de fonctions de string/num
 
 
 # NOTE: on garde la signature mais on ne l'utilise plus.
