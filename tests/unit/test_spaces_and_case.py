@@ -1,7 +1,7 @@
 # tests/unit/test_spaces_and_case.py
 from pyspark.sql import Row
 from bikeops.utils.transforms import clean_city
-from tests.unit.utils_assert import assert_df_equal
+from utils_assert import assert_df_equal
 
 
 def test_spaces_and_case(spark):

@@ -78,7 +78,7 @@ jobs:
       SPARK_LOCAL_IP: 127.0.0.1
       PYSPARK_PYTHON: python
       PYSPARK_DRIVER_PYTHON: python     # <— ajouté
-      PYTHONPATH: src
+      PYTHONPATH: src:tests
     steps:
       - uses: actions/checkout@v4
 

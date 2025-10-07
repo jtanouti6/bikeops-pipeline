@@ -1,7 +1,7 @@
 from pyspark.sql import Row
 from pyspark.sql.types import DecimalType
 from bikeops.utils.transforms import clean_price
-from tests.unit.utils_assert import assert_df_equal
+from utils_assert import assert_df_equal
 
 
 def test_clean_price_values_and_schema(spark):
